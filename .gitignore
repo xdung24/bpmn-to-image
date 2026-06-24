@@ -1,0 +1,16 @@
+# Binary
+bpmn-to-image
+bpmn-to-image.exe
+
+# Test outputs
+testdata/output.*
+
+# IDE
+.idea/
+.vscode/
+
+# Images
+*.png
+*.jpg
+*.jpeg
+*.svg
