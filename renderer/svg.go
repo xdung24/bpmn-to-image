@@ -25,7 +25,7 @@ func NewSVGRenderer() *SVGRenderer {
 // Render generates SVG content from the BPMN definitions.
 func (r *SVGRenderer) Render(defs *bpmn.Definitions) ([]byte, error) {
 	if len(defs.Diagrams) == 0 {
-		return nil, fmt.Errorf("no diagram data available for rendering")
+		return nil, fmt.Errorf(noDIMessage)
 	}
 
 	diagram := defs.Diagrams[0]

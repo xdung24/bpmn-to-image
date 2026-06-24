@@ -73,7 +73,7 @@ func (r *RasterRenderer) RenderJPG(defs *bpmn.Definitions, outputPath string, qu
 
 func (r *RasterRenderer) render(defs *bpmn.Definitions) (image.Image, error) {
 	if len(defs.Diagrams) == 0 {
-		return nil, fmt.Errorf("no diagram data available for rendering")
+		return nil, fmt.Errorf(noDIMessage)
 	}
 
 	diagram := defs.Diagrams[0]

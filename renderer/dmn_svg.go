@@ -26,7 +26,7 @@ func NewDMNSVGRenderer() *DMNSVGRenderer {
 // Render produces an SVG document for the first DMN diagram found in defs.
 func (r *DMNSVGRenderer) Render(defs *dmn.Definitions) ([]byte, error) {
 	if defs.DMNDI == nil || len(defs.DMNDI.Diagrams) == 0 {
-		return nil, fmt.Errorf("no diagram (DMNDI) data available for rendering")
+		return nil, fmt.Errorf(noDMNDIMessage)
 	}
 	diagram := defs.DMNDI.Diagrams[0]
 	nodes := defs.BuildNodeIndex()

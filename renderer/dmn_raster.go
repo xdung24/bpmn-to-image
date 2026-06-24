@@ -67,7 +67,7 @@ func (r *DMNRasterRenderer) RenderJPG(defs *dmn.Definitions, outputPath string, 
 
 func (r *DMNRasterRenderer) render(defs *dmn.Definitions) (image.Image, error) {
 	if defs.DMNDI == nil || len(defs.DMNDI.Diagrams) == 0 {
-		return nil, fmt.Errorf("no diagram (DMNDI) data available for rendering")
+		return nil, fmt.Errorf(noDMNDIMessage)
 	}
 	diagram := defs.DMNDI.Diagrams[0]
 	nodes := defs.BuildNodeIndex()

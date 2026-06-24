@@ -214,4 +214,4 @@ Contributions are welcome! Please fork the repository, create a feature branch, 
 
 ## Version
 
-`v0.1.0`
+`v0.2.0`
