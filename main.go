@@ -122,8 +122,6 @@ func main() {
 			os.Exit(1)
 		}
 	}
-
-	fmt.Printf("Successfully converted %s -> %s\n", input, output)
 }
 
 // detectInputKind returns "bpmn" or "dmn" based on the file extension.
