@@ -94,6 +94,9 @@ func (p *Process) GetAllFlowNodes() map[string]string {
 	for _, e := range p.SubProcesses {
 		nodes[e.ID] = "subProcess"
 	}
+	for _, e := range p.CallActivities {
+		nodes[e.ID] = "callActivity"
+	}
 	for _, e := range p.ExclusiveGateways {
 		nodes[e.ID] = "exclusiveGateway"
 	}

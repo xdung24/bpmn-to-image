@@ -178,7 +178,7 @@ func (r *SVGRenderer) renderShape(sb *strings.Builder, shape *bpmn.BPMNShape, el
 		r.renderStartEvent(sb, x, y, w, h, shape, name)
 	case "endEvent":
 		r.renderEndEvent(sb, x, y, w, h, shape, name)
-	case "task", "userTask", "serviceTask", "scriptTask", "sendTask", "receiveTask", "manualTask", "businessRuleTask":
+	case "task", "userTask", "serviceTask", "scriptTask", "sendTask", "receiveTask", "manualTask", "businessRuleTask", "callActivity":
 		r.renderTask(sb, x, y, w, h, shape, elemType, name)
 	case "subProcess":
 		r.renderSubProcess(sb, x, y, w, h, shape, name)
@@ -533,6 +533,11 @@ func BuildElementNameMap(defs *bpmn.Definitions) map[string]string {
 			}
 		}
 		for _, e := range proc.SubProcesses {
+			if e.Name != "" {
+				names[e.ID] = e.Name
+			}
+		}
+		for _, e := range proc.CallActivities {
 			if e.Name != "" {
 				names[e.ID] = e.Name
 			}

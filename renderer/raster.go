@@ -170,7 +170,7 @@ func (r *RasterRenderer) drawShape(dc *gg.Context, shape *bpmn.BPMNShape, elemTy
 		r.drawEvent(dc, x, y, w, h, 2, hexColor(r.theme.StartStroke), hexColor(r.theme.StartFill), false, name, shape)
 	case "endEvent":
 		r.drawEvent(dc, x, y, w, h, 3.5, hexColor(r.theme.EndStroke), hexColor(r.theme.EndFill), false, name, shape)
-	case "task", "userTask", "serviceTask", "scriptTask", "sendTask", "receiveTask", "manualTask", "businessRuleTask":
+	case "task", "userTask", "serviceTask", "scriptTask", "sendTask", "receiveTask", "manualTask", "businessRuleTask", "callActivity":
 		r.drawTask(dc, x, y, w, h, elemType, name)
 	case "subProcess":
 		r.drawSubProcess(dc, x, y, w, h, name)

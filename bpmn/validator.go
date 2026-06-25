@@ -496,6 +496,9 @@ func collectAllIDs(proc *Process) []string {
 	for _, e := range proc.SubProcesses {
 		ids = append(ids, e.ID)
 	}
+	for _, e := range proc.CallActivities {
+		ids = append(ids, e.ID)
+	}
 	for _, e := range proc.ExclusiveGateways {
 		ids = append(ids, e.ID)
 	}

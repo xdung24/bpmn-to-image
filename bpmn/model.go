@@ -51,6 +51,7 @@ type Process struct {
 	ManualTasks             []ManualTask             `xml:"manualTask"`
 	BusinessRuleTasks       []BusinessRuleTask       `xml:"businessRuleTask"`
 	SubProcesses            []SubProcess             `xml:"subProcess"`
+	CallActivities          []CallActivity           `xml:"callActivity"`
 	ExclusiveGateways       []ExclusiveGateway       `xml:"exclusiveGateway"`
 	ParallelGateways        []ParallelGateway        `xml:"parallelGateway"`
 	InclusiveGateways       []InclusiveGateway       `xml:"inclusiveGateway"`
@@ -147,6 +148,12 @@ type BusinessRuleTask struct {
 type SubProcess struct {
 	XMLName xml.Name `xml:"subProcess"`
 	FlowNode
+}
+
+type CallActivity struct {
+	XMLName xml.Name `xml:"callActivity"`
+	FlowNode
+	CalledElement string `xml:"calledElement,attr"`
 }
 
 type ExclusiveGateway struct {
