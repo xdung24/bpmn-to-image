@@ -14,10 +14,13 @@ type SVGRenderer struct {
 	theme   Theme
 }
 
-// NewSVGRenderer creates a new SVG renderer with default settings.
-func NewSVGRenderer() *SVGRenderer {
+// NewSVGRenderer creates a new SVG renderer with the given padding.
+func NewSVGRenderer(padding float64) *SVGRenderer {
+	if padding < 0 {
+		padding = 30
+	}
 	return &SVGRenderer{
-		padding: 30,
+		padding: padding,
 		theme:   DefaultTheme,
 	}
 }

@@ -23,12 +23,15 @@ type DMNRasterRenderer struct {
 }
 
 // NewDMNRasterRenderer returns a raster renderer for DMN at the given scale.
-func NewDMNRasterRenderer(scale float64) *DMNRasterRenderer {
+func NewDMNRasterRenderer(scale, padding float64) *DMNRasterRenderer {
 	if scale <= 0 {
 		scale = 2.0
 	}
+	if padding < 0 {
+		padding = 30
+	}
 	return &DMNRasterRenderer{
-		padding: 30,
+		padding: padding,
 		scale:   scale,
 		theme:   DefaultTheme,
 	}

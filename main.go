@@ -12,7 +12,7 @@ import (
 	"github.com/xdung24/bpmn-to-image/renderer"
 )
 
-var version = "0.2.1"
+var version = "0.2.2"
 
 func main() {
 	var (
@@ -21,6 +21,7 @@ func main() {
 		format  string
 		scale   float64
 		quality int
+		padding float64
 	)
 
 	flag.StringVar(&input, "input", "", "Path to input BPMN or DMN file (required)")
@@ -31,6 +32,7 @@ func main() {
 	flag.StringVar(&format, "f", "", "Output format (shorthand)")
 	flag.Float64Var(&scale, "scale", 2.0, "Scale factor for raster output (default: 2.0)")
 	flag.IntVar(&quality, "quality", 90, "JPEG quality 1-100 (default: 90)")
+	flag.Float64Var(&padding, "padding", 30, "Padding around the diagram in pixels (default: 30)")
 	ver := flag.Bool("version", false, "Print version and exit")
 
 	flag.Usage = func() {
@@ -112,12 +114,12 @@ func main() {
 
 	switch kind {
 	case "bpmn":
-		if err := convertBPMN(input, output, format, scale, quality); err != nil {
+		if err := convertBPMN(input, output, format, scale, quality, padding); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
 	case "dmn":
-		if err := convertDMN(input, output, format, scale, quality); err != nil {
+		if err := convertDMN(input, output, format, scale, quality, padding); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
@@ -137,7 +139,7 @@ func detectInputKind(path string) (string, error) {
 	}
 }
 
-func convertBPMN(input, output, format string, scale float64, quality int) error {
+func convertBPMN(input, output, format string, scale float64, quality int, padding float64) error {
 	defs, err := bpmn.Parse(input)
 	if err != nil {
 		return fmt.Errorf("parsing BPMN file: %w", err)
@@ -157,20 +159,20 @@ func convertBPMN(input, output, format string, scale float64, quality int) error
 
 	switch format {
 	case "svg":
-		data, err := renderer.NewSVGRenderer().Render(defs)
+		data, err := renderer.NewSVGRenderer(padding).Render(defs)
 		if err != nil {
 			return fmt.Errorf("rendering SVG: %w", err)
 		}
 		return os.WriteFile(output, data, 0644)
 	case "png":
-		return renderer.NewRasterRenderer(scale).RenderPNG(defs, output)
+		return renderer.NewRasterRenderer(scale, padding).RenderPNG(defs, output)
 	case "jpg":
-		return renderer.NewRasterRenderer(scale).RenderJPG(defs, output, quality)
+		return renderer.NewRasterRenderer(scale, padding).RenderJPG(defs, output, quality)
 	}
 	return nil
 }
 
-func convertDMN(input, output, format string, scale float64, quality int) error {
+func convertDMN(input, output, format string, scale float64, quality int, padding float64) error {
 	defs, err := dmn.Parse(input)
 	if err != nil {
 		return fmt.Errorf("parsing DMN file: %w", err)
@@ -190,15 +192,15 @@ func convertDMN(input, output, format string, scale float64, quality int) error 
 
 	switch format {
 	case "svg":
-		data, err := renderer.NewDMNSVGRenderer().Render(defs)
+		data, err := renderer.NewDMNSVGRenderer(padding).Render(defs)
 		if err != nil {
 			return fmt.Errorf("rendering SVG: %w", err)
 		}
 		return os.WriteFile(output, data, 0644)
 	case "png":
-		return renderer.NewDMNRasterRenderer(scale).RenderPNG(defs, output)
+		return renderer.NewDMNRasterRenderer(scale, padding).RenderPNG(defs, output)
 	case "jpg":
-		return renderer.NewDMNRasterRenderer(scale).RenderJPG(defs, output, quality)
+		return renderer.NewDMNRasterRenderer(scale, padding).RenderJPG(defs, output, quality)
 	}
 	return nil
 }

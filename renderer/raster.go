@@ -24,12 +24,15 @@ type RasterRenderer struct {
 }
 
 // NewRasterRenderer creates a new raster renderer.
-func NewRasterRenderer(scale float64) *RasterRenderer {
+func NewRasterRenderer(scale, padding float64) *RasterRenderer {
 	if scale <= 0 {
 		scale = 2.0
 	}
+	if padding < 0 {
+		padding = 30
+	}
 	return &RasterRenderer{
-		padding: 30,
+		padding: padding,
 		scale:   scale,
 		theme:   DefaultTheme,
 	}

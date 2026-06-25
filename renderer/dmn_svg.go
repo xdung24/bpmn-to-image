@@ -16,9 +16,12 @@ type DMNSVGRenderer struct {
 }
 
 // NewDMNSVGRenderer returns an SVG renderer for DMN files.
-func NewDMNSVGRenderer() *DMNSVGRenderer {
+func NewDMNSVGRenderer(padding float64) *DMNSVGRenderer {
+	if padding < 0 {
+		padding = 30
+	}
 	return &DMNSVGRenderer{
-		padding: 30,
+		padding: padding,
 		theme:   DefaultTheme,
 	}
 }
