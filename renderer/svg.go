@@ -55,6 +55,12 @@ func (r *SVGRenderer) Render(defs *bpmn.Definitions) ([]byte, error) {
   <marker id="arrowhead" markerWidth="12" markerHeight="9" refX="9" refY="4.5" orient="auto" markerUnits="userSpaceOnUse">
     <path d="M0,0 L9,4.5 L0,9 L2.5,4.5 Z" fill="%s"/>
   </marker>
+  <marker id="arrowhead-open" markerWidth="14" markerHeight="11" refX="12" refY="5.5" orient="auto" markerUnits="userSpaceOnUse">
+    <path d="M0,0 L11,5.5 L0,11" fill="none" stroke="%s" stroke-width="1.4"/>
+  </marker>
+  <marker id="dot" markerWidth="9" markerHeight="9" refX="4.5" refY="4.5" orient="auto" markerUnits="userSpaceOnUse">
+    <circle cx="4.5" cy="4.5" r="3" fill="#ffffff" stroke="%s" stroke-width="1.2"/>
+  </marker>
   <linearGradient id="grad-task" x1="0" y1="0" x2="0" y2="1">
     <stop offset="0%%" stop-color="#ffffff"/>
     <stop offset="100%%" stop-color="%s"/>
@@ -96,18 +102,32 @@ func (r *SVGRenderer) Render(defs *bpmn.Definitions) ([]byte, error) {
   .bpmn-flow-label { font-family: 'Segoe UI', Arial, sans-serif; font-size: 11px; fill: %s; text-anchor: middle; dominant-baseline: central; }
   .bpmn-pool { fill: %s; stroke: %s; stroke-width: 2; }
   .bpmn-pool-header { fill: %s; stroke: %s; stroke-width: 2; }
-  .bpmn-lane { fill: none; stroke: %s; stroke-width: 1; stroke-dasharray: 4,4; }
+  .bpmn-lane { fill: none; stroke: %s; stroke-width: 1; }
+  .bpmn-lane-header { fill: %s; stroke: %s; stroke-width: 1; }
   .bpmn-annotation { fill: none; stroke: %s; stroke-width: 1; }
   .bpmn-annotation-text { font-family: 'Segoe UI', Arial, sans-serif; font-size: 11px; fill: %s; }
   .bpmn-icon { stroke: %s; fill: none; }
+  .bpmn-data-object { fill: #ffffff; stroke: %s; stroke-width: 1.4; }
+  .bpmn-data-object-fold { fill: #f3f4f6; stroke: %s; stroke-width: 1.4; }
+  .bpmn-data-store { fill: #ffffff; stroke: %s; stroke-width: 1.4; }
+  .bpmn-data-store-ridge { fill: none; stroke: %s; stroke-width: 1; }
+  .bpmn-group { fill: none; stroke: %s; stroke-width: 1.5; stroke-dasharray: 10,4,2,4; }
+  .bpmn-message-flow { fill: none; stroke: %s; stroke-width: 1.4; stroke-dasharray: 6,4; marker-end: url(#arrowhead-open); marker-start: url(#dot); stroke-linejoin: round; stroke-linecap: round; }
+  .bpmn-association-flow { fill: none; stroke: %s; stroke-width: 1; stroke-dasharray: 2,3; }
 </style>
 <rect x="0" y="0" width="%.0f" height="%.0f" fill="%s"/>
 `, width, height, width, height,
-		t.Flow,
+		t.Flow, t.Flow, t.Flow,
 		t.TaskFill, t.SubProcessFill, t.StartFill, t.EndFill, t.IntermediateFill, t.GatewayFill,
 		t.TaskStroke, t.SubProcessStroke, t.StartStroke, t.IntermediateStroke, t.EndStroke,
 		t.GatewayStroke, t.GatewayMarker, t.Flow, t.Label, t.Flow,
-		t.PoolFill, t.PoolStroke, t.PoolHeader, t.PoolStroke, t.LaneStroke, t.AnnotationStroke, t.Label, t.IconColor,
+		t.PoolFill, t.PoolStroke, t.PoolHeader, t.PoolStroke,
+		t.LaneStroke,
+		t.PoolHeader, t.PoolStroke,
+		t.AnnotationStroke, t.Label, t.IconColor,
+		t.Label, t.Label,
+		t.Label, t.Label,
+		t.Label, t.Label, t.Label,
 		width, height, t.CanvasBg))
 
 	// Render shapes
@@ -118,7 +138,8 @@ func (r *SVGRenderer) Render(defs *bpmn.Definitions) ([]byte, error) {
 
 	// Render edges
 	for _, edge := range plane.Edges {
-		r.renderEdge(&sb, &edge, offsetX, offsetY, elementNames)
+		edgeType := elementTypes[edge.BpmnElement]
+		r.renderEdge(&sb, &edge, edgeType, offsetX, offsetY, elementNames)
 	}
 
 	sb.WriteString("</svg>\n")
@@ -204,6 +225,12 @@ func (r *SVGRenderer) renderShape(sb *strings.Builder, shape *bpmn.BPMNShape, el
 		r.renderLane(sb, x, y, w, h, shape, name)
 	case "textAnnotation":
 		r.renderTextAnnotation(sb, x, y, w, h, shape, name)
+	case "dataObjectReference":
+		r.renderDataObjectReference(sb, x, y, w, h, name)
+	case "dataStoreReference":
+		r.renderDataStoreReference(sb, x, y, w, h, name)
+	case "group":
+		r.renderGroup(sb, x, y, w, h, name)
 	default:
 		// Generic rectangle for unknown elements
 		sb.WriteString(fmt.Sprintf(`  <rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" rx="5" ry="5" class="bpmn-task"/>
@@ -373,20 +400,105 @@ func (r *SVGRenderer) renderPool(sb *strings.Builder, x, y, w, h float64, shape 
 	sb.WriteString(fmt.Sprintf(`  <rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" class="bpmn-pool"/>
 `, x, y, w, h))
 
-	if shape.IsHorizontal == nil || *shape.IsHorizontal {
-		// Header strip on the left
+	horizontal := shape.IsHorizontal == nil || *shape.IsHorizontal
+
+	if horizontal {
+		// Header strip on the left, vertical text
 		sb.WriteString(fmt.Sprintf(`  <rect x="%.1f" y="%.1f" width="30" height="%.1f" class="bpmn-pool-header"/>
 `, x, y, h))
-		labelX := x + 15
-		labelY := y + h/2
-		sb.WriteString(fmt.Sprintf(`  <text x="%.1f" y="%.1f" transform="rotate(-90,%.1f,%.1f)" class="bpmn-label">%s</text>
+		if name != "" {
+			labelX := x + 15
+			labelY := y + h/2
+			sb.WriteString(fmt.Sprintf(`  <text x="%.1f" y="%.1f" transform="rotate(-90,%.1f,%.1f)" class="bpmn-label">%s</text>
 `, labelX, labelY, labelX, labelY, escapeXML(name)))
+		}
+	} else {
+		// Header strip on the top, horizontal text
+		sb.WriteString(fmt.Sprintf(`  <rect x="%.1f" y="%.1f" width="%.1f" height="30" class="bpmn-pool-header"/>
+`, x, y, w))
+		if name != "" {
+			sb.WriteString(fmt.Sprintf(`  <text x="%.1f" y="%.1f" class="bpmn-label">%s</text>
+`, x+w/2, y+15, escapeXML(name)))
+		}
 	}
 }
 
 func (r *SVGRenderer) renderLane(sb *strings.Builder, x, y, w, h float64, shape *bpmn.BPMNShape, name string) {
 	sb.WriteString(fmt.Sprintf(`  <rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" class="bpmn-lane"/>
 `, x, y, w, h))
+
+	horizontal := shape.IsHorizontal == nil || *shape.IsHorizontal
+
+	if name == "" {
+		return
+	}
+
+	if horizontal {
+		// Header strip on the left of the lane, vertical text
+		sb.WriteString(fmt.Sprintf(`  <rect x="%.1f" y="%.1f" width="20" height="%.1f" class="bpmn-lane-header"/>
+`, x, y, h))
+		labelX := x + 10
+		labelY := y + h/2
+		sb.WriteString(fmt.Sprintf(`  <text x="%.1f" y="%.1f" transform="rotate(-90,%.1f,%.1f)" class="bpmn-label">%s</text>
+`, labelX, labelY, labelX, labelY, escapeXML(name)))
+	} else {
+		// Header strip on the top of the lane, horizontal text
+		sb.WriteString(fmt.Sprintf(`  <rect x="%.1f" y="%.1f" width="%.1f" height="20" class="bpmn-lane-header"/>
+`, x, y, w))
+		sb.WriteString(fmt.Sprintf(`  <text x="%.1f" y="%.1f" class="bpmn-label">%s</text>
+`, x+w/2, y+10, escapeXML(name)))
+	}
+}
+
+// renderDataObjectReference draws the document/page shape with a folded corner.
+func (r *SVGRenderer) renderDataObjectReference(sb *strings.Builder, x, y, w, h float64, name string) {
+	fold := 12.0
+	if fold > w*0.4 {
+		fold = w * 0.4
+	}
+	// Main shape with folded corner
+	sb.WriteString(fmt.Sprintf(`  <path d="M%.1f,%.1f L%.1f,%.1f L%.1f,%.1f L%.1f,%.1f L%.1f,%.1f Z" class="bpmn-data-object"/>
+`, x, y, x+w-fold, y, x+w, y+fold, x+w, y+h, x, y+h))
+	// Folded corner triangle
+	sb.WriteString(fmt.Sprintf(`  <path d="M%.1f,%.1f L%.1f,%.1f L%.1f,%.1f Z" class="bpmn-data-object-fold"/>
+`, x+w-fold, y, x+w-fold, y+fold, x+w, y+fold))
+
+	// Label below the shape
+	if name != "" {
+		r.renderLabelBelow(sb, x+w/2, y+h+12, math.Max(w, 80), name)
+	}
+}
+
+// renderDataStoreReference draws the cylinder (database) shape.
+func (r *SVGRenderer) renderDataStoreReference(sb *strings.Builder, x, y, w, h float64, name string) {
+	ry := math.Min(h*0.15, 8)
+	// Body: rect between top and bottom ellipse, then the bottom curve
+	sb.WriteString(fmt.Sprintf(`  <path d="M%.1f,%.1f L%.1f,%.1f A %.1f,%.1f 0 0 0 %.1f,%.1f L%.1f,%.1f A %.1f,%.1f 0 0 0 %.1f,%.1f Z" class="bpmn-data-store"/>
+`, x, y+ry, x, y+h-ry, w/2, ry, x+w, y+h-ry, x+w, y+ry, w/2, ry, x, y+ry))
+	// Top ellipse outline (visible band)
+	sb.WriteString(fmt.Sprintf(`  <ellipse cx="%.1f" cy="%.1f" rx="%.1f" ry="%.1f" class="bpmn-data-store"/>
+`, x+w/2, y+ry, w/2, ry))
+	// Two ridge lines on top to give cylinder a 3D look
+	sb.WriteString(fmt.Sprintf(`  <path d="M%.1f,%.1f A %.1f,%.1f 0 0 0 %.1f,%.1f" class="bpmn-data-store-ridge"/>
+`, x+w*0.1, y+ry+2, w*0.4, ry*0.6, x+w*0.9, y+ry+2))
+	sb.WriteString(fmt.Sprintf(`  <path d="M%.1f,%.1f A %.1f,%.1f 0 0 0 %.1f,%.1f" class="bpmn-data-store-ridge"/>
+`, x+w*0.15, y+ry+5, w*0.35, ry*0.5, x+w*0.85, y+ry+5))
+
+	// Label below the cylinder
+	if name != "" {
+		r.renderLabelBelow(sb, x+w/2, y+h+12, math.Max(w+40, 80), name)
+	}
+}
+
+// renderGroup draws a dashed rounded rectangle used as a visual grouping.
+func (r *SVGRenderer) renderGroup(sb *strings.Builder, x, y, w, h float64, name string) {
+	sb.WriteString(fmt.Sprintf(`  <rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" rx="10" ry="10" class="bpmn-group"/>
+`, x, y, w, h))
+	if name != "" {
+		// Label sits above-left of the group
+		sb.WriteString(fmt.Sprintf(`  <text x="%.1f" y="%.1f" class="bpmn-label" text-anchor="start">%s</text>
+`, x+10, y-4, escapeXML(name)))
+	}
 }
 
 func (r *SVGRenderer) renderTextAnnotation(sb *strings.Builder, x, y, w, h float64, shape *bpmn.BPMNShape, name string) {
@@ -413,7 +525,7 @@ func (r *SVGRenderer) renderTextAnnotation(sb *strings.Builder, x, y, w, h float
 	}
 }
 
-func (r *SVGRenderer) renderEdge(sb *strings.Builder, edge *bpmn.BPMNEdge, offsetX, offsetY float64, names map[string]string) {
+func (r *SVGRenderer) renderEdge(sb *strings.Builder, edge *bpmn.BPMNEdge, edgeType string, offsetX, offsetY float64, names map[string]string) {
 	if len(edge.Waypoints) < 2 {
 		return
 	}
@@ -423,8 +535,16 @@ func (r *SVGRenderer) renderEdge(sb *strings.Builder, edge *bpmn.BPMNEdge, offse
 		points = append(points, fmt.Sprintf("%.1f,%.1f", wp.X+offsetX, wp.Y+offsetY))
 	}
 
-	sb.WriteString(fmt.Sprintf(`  <polyline points="%s" class="bpmn-flow"/>
-`, strings.Join(points, " ")))
+	className := "bpmn-flow"
+	switch edgeType {
+	case "messageFlow":
+		className = "bpmn-message-flow"
+	case "association":
+		className = "bpmn-association-flow"
+	}
+
+	sb.WriteString(fmt.Sprintf(`  <polyline points="%s" class="%s"/>
+`, strings.Join(points, " "), className))
 
 	// Render edge label if present
 	name := names[edge.BpmnElement]
@@ -558,6 +678,13 @@ func buildElementTypeMap(defs *bpmn.Definitions) map[string]string {
 			types[id] = t
 		}
 		collectProcessConnectors(types, proc)
+
+		// Lanes are not flow nodes but have their own DI shapes.
+		if proc.LaneSet != nil {
+			for _, lane := range proc.LaneSet.Lanes {
+				types[lane.ID] = "lane"
+			}
+		}
 	}
 
 	for _, collab := range defs.Collaborations {
@@ -566,6 +693,15 @@ func buildElementTypeMap(defs *bpmn.Definitions) map[string]string {
 		}
 		for _, mf := range collab.MessageFlows {
 			types[mf.ID] = "messageFlow"
+		}
+		for _, ta := range collab.TextAnnotations {
+			types[ta.ID] = "textAnnotation"
+		}
+		for _, a := range collab.Associations {
+			types[a.ID] = "association"
+		}
+		for _, g := range collab.Groups {
+			types[g.ID] = "group"
 		}
 	}
 
@@ -584,6 +720,12 @@ func collectProcessConnectors(types map[string]string, proc *bpmn.Process) {
 	for _, a := range proc.Associations {
 		types[a.ID] = "association"
 	}
+	for _, d := range proc.DataObjectReferences {
+		types[d.ID] = "dataObjectReference"
+	}
+	for _, d := range proc.DataStoreReferences {
+		types[d.ID] = "dataStoreReference"
+	}
 	for i := range proc.SubProcesses {
 		collectSubProcessConnectors(types, &proc.SubProcesses[i])
 	}
@@ -598,6 +740,12 @@ func collectSubProcessConnectors(types map[string]string, sp *bpmn.SubProcess) {
 	}
 	for _, a := range sp.Associations {
 		types[a.ID] = "association"
+	}
+	for _, d := range sp.DataObjectReferences {
+		types[d.ID] = "dataObjectReference"
+	}
+	for _, d := range sp.DataStoreReferences {
+		types[d.ID] = "dataStoreReference"
 	}
 	for i := range sp.SubProcesses {
 		collectSubProcessConnectors(types, &sp.SubProcesses[i])
@@ -627,6 +775,9 @@ func BuildElementNameMap(defs *bpmn.Definitions) map[string]string {
 			if mf.Name != "" {
 				names[mf.ID] = mf.Name
 			}
+		}
+		for _, ta := range collab.TextAnnotations {
+			addName(names, ta.ID, ta.Text)
 		}
 	}
 
@@ -699,6 +850,17 @@ func collectProcessNames(names map[string]string, proc *bpmn.Process) {
 	for _, ta := range proc.TextAnnotations {
 		addName(names, ta.ID, ta.Text)
 	}
+	for _, d := range proc.DataObjectReferences {
+		addName(names, d.ID, d.Name)
+	}
+	for _, d := range proc.DataStoreReferences {
+		addName(names, d.ID, d.Name)
+	}
+	if proc.LaneSet != nil {
+		for _, lane := range proc.LaneSet.Lanes {
+			addName(names, lane.ID, lane.Name)
+		}
+	}
 }
 
 func collectSubProcessNames(names map[string]string, sp *bpmn.SubProcess) {
@@ -765,6 +927,12 @@ func collectSubProcessNames(names map[string]string, sp *bpmn.SubProcess) {
 	}
 	for _, ta := range sp.TextAnnotations {
 		addName(names, ta.ID, ta.Text)
+	}
+	for _, d := range sp.DataObjectReferences {
+		addName(names, d.ID, d.Name)
+	}
+	for _, d := range sp.DataStoreReferences {
+		addName(names, d.ID, d.Name)
 	}
 }
 

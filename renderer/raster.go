@@ -106,7 +106,8 @@ func (r *RasterRenderer) render(defs *bpmn.Definitions) (image.Image, error) {
 	// Render edges first (below shapes)
 	for _, edge := range plane.Edges {
 		name := elementNames[edge.BpmnElement]
-		r.drawEdge(dc, &edge, offsetX, offsetY, name)
+		edgeType := elementTypes[edge.BpmnElement]
+		r.drawEdge(dc, &edge, edgeType, offsetX, offsetY, name)
 	}
 
 	// Render shapes
@@ -192,9 +193,15 @@ func (r *RasterRenderer) drawShape(dc *gg.Context, shape *bpmn.BPMNShape, elemTy
 	case "participant":
 		r.drawPool(dc, x, y, w, h, name, shape)
 	case "lane":
-		r.drawLane(dc, x, y, w, h)
+		r.drawLane(dc, x, y, w, h, name, shape)
 	case "textAnnotation":
 		r.drawTextAnnotation(dc, x, y, w, h, name)
+	case "dataObjectReference":
+		r.drawDataObjectReference(dc, x, y, w, h, name)
+	case "dataStoreReference":
+		r.drawDataStoreReference(dc, x, y, w, h, name)
+	case "group":
+		r.drawGroup(dc, x, y, w, h, name)
 	default:
 		r.drawTask(dc, x, y, w, h, "task", name)
 	}
@@ -456,13 +463,138 @@ func (r *RasterRenderer) drawPool(dc *gg.Context, x, y, w, h float64, name strin
 	}
 }
 
-func (r *RasterRenderer) drawLane(dc *gg.Context, x, y, w, h float64) {
+func (r *RasterRenderer) drawLane(dc *gg.Context, x, y, w, h float64, name string, shape *bpmn.BPMNShape) {
+	horizontal := shape == nil || shape.IsHorizontal == nil || *shape.IsHorizontal
+
+	// Lane outline
 	dc.SetColor(hexColor(r.theme.LaneStroke))
 	dc.SetLineWidth(1 * r.scale)
-	dc.SetDash(4*r.scale, 4*r.scale)
 	dc.DrawRectangle(x, y, w, h)
 	dc.Stroke()
-	dc.SetDash() // reset
+
+	if name == "" {
+		return
+	}
+
+	if horizontal {
+		// Lane header on the left, vertical text
+		dc.SetColor(hexColor(r.theme.PoolHeader))
+		dc.DrawRectangle(x, y, 20*r.scale, h)
+		dc.Fill()
+		dc.SetColor(hexColor(r.theme.LaneStroke))
+		dc.SetLineWidth(1 * r.scale)
+		dc.DrawLine(x+20*r.scale, y, x+20*r.scale, y+h)
+		dc.Stroke()
+
+		dc.SetColor(hexColor(r.theme.Label))
+		dc.Push()
+		dc.RotateAbout(-math.Pi/2, x+10*r.scale, y+h/2)
+		dc.DrawStringAnchored(name, x+10*r.scale, y+h/2, 0.5, 0.5)
+		dc.Pop()
+	} else {
+		// Lane header on the top, horizontal text
+		dc.SetColor(hexColor(r.theme.PoolHeader))
+		dc.DrawRectangle(x, y, w, 20*r.scale)
+		dc.Fill()
+		dc.SetColor(hexColor(r.theme.LaneStroke))
+		dc.SetLineWidth(1 * r.scale)
+		dc.DrawLine(x, y+20*r.scale, x+w, y+20*r.scale)
+		dc.Stroke()
+
+		dc.SetColor(hexColor(r.theme.Label))
+		dc.DrawStringAnchored(name, x+w/2, y+10*r.scale, 0.5, 0.5)
+	}
+}
+
+// drawDataObjectReference draws a document/page shape with a folded corner.
+func (r *RasterRenderer) drawDataObjectReference(dc *gg.Context, x, y, w, h float64, name string) {
+	fold := 12 * r.scale
+	if fold > w*0.4 {
+		fold = w * 0.4
+	}
+
+	// Main shape (with folded corner)
+	dc.SetColor(hexColor("#ffffff"))
+	dc.MoveTo(x, y)
+	dc.LineTo(x+w-fold, y)
+	dc.LineTo(x+w, y+fold)
+	dc.LineTo(x+w, y+h)
+	dc.LineTo(x, y+h)
+	dc.ClosePath()
+	dc.FillPreserve()
+	dc.SetColor(hexColor(r.theme.Label))
+	dc.SetLineWidth(1.4 * r.scale)
+	dc.Stroke()
+
+	// Fold triangle
+	dc.SetColor(hexColor("#f3f4f6"))
+	dc.MoveTo(x+w-fold, y)
+	dc.LineTo(x+w-fold, y+fold)
+	dc.LineTo(x+w, y+fold)
+	dc.ClosePath()
+	dc.FillPreserve()
+	dc.SetColor(hexColor(r.theme.Label))
+	dc.SetLineWidth(1.4 * r.scale)
+	dc.Stroke()
+
+	if name != "" {
+		dc.SetColor(hexColor(r.theme.Label))
+		r.drawWrappedTextTop(dc, x+w/2, y+h+8*r.scale, math.Max(w, 80*r.scale), name)
+	}
+}
+
+// drawDataStoreReference draws a cylinder (database) shape.
+func (r *RasterRenderer) drawDataStoreReference(dc *gg.Context, x, y, w, h float64, name string) {
+	ry := math.Min(h*0.15, 8*r.scale)
+
+	// Body rectangle between top and bottom curves
+	dc.SetColor(hexColor("#ffffff"))
+	dc.DrawRectangle(x, y+ry, w, h-2*ry)
+	dc.Fill()
+
+	// Bottom ellipse
+	dc.DrawEllipse(x+w/2, y+h-ry, w/2, ry)
+	dc.SetColor(hexColor("#ffffff"))
+	dc.FillPreserve()
+	dc.SetColor(hexColor(r.theme.Label))
+	dc.SetLineWidth(1.4 * r.scale)
+	dc.Stroke()
+
+	// Side lines
+	dc.SetColor(hexColor(r.theme.Label))
+	dc.SetLineWidth(1.4 * r.scale)
+	dc.DrawLine(x, y+ry, x, y+h-ry)
+	dc.Stroke()
+	dc.DrawLine(x+w, y+ry, x+w, y+h-ry)
+	dc.Stroke()
+
+	// Top ellipse
+	dc.DrawEllipse(x+w/2, y+ry, w/2, ry)
+	dc.SetColor(hexColor("#ffffff"))
+	dc.FillPreserve()
+	dc.SetColor(hexColor(r.theme.Label))
+	dc.SetLineWidth(1.4 * r.scale)
+	dc.Stroke()
+
+	if name != "" {
+		dc.SetColor(hexColor(r.theme.Label))
+		r.drawWrappedTextTop(dc, x+w/2, y+h+8*r.scale, math.Max(w+40*r.scale, 80*r.scale), name)
+	}
+}
+
+// drawGroup draws a dashed rounded rectangle.
+func (r *RasterRenderer) drawGroup(dc *gg.Context, x, y, w, h float64, name string) {
+	dc.SetColor(hexColor(r.theme.Label))
+	dc.SetLineWidth(1.5 * r.scale)
+	dc.SetDash(10*r.scale, 4*r.scale, 2*r.scale, 4*r.scale)
+	dc.DrawRoundedRectangle(x, y, w, h, 10*r.scale)
+	dc.Stroke()
+	dc.SetDash()
+
+	if name != "" {
+		dc.SetColor(hexColor(r.theme.Label))
+		dc.DrawStringAnchored(name, x+10*r.scale, y-4*r.scale, 0, 0.5)
+	}
 }
 
 func (r *RasterRenderer) drawTextAnnotation(dc *gg.Context, x, y, w, h float64, name string) {
@@ -492,28 +624,53 @@ func (r *RasterRenderer) drawTextAnnotation(dc *gg.Context, x, y, w, h float64, 
 	}
 }
 
-func (r *RasterRenderer) drawEdge(dc *gg.Context, edge *bpmn.BPMNEdge, offsetX, offsetY float64, name string) {
+func (r *RasterRenderer) drawEdge(dc *gg.Context, edge *bpmn.BPMNEdge, edgeType string, offsetX, offsetY float64, name string) {
 	if len(edge.Waypoints) < 2 {
 		return
 	}
 
 	dc.SetColor(hexColor(r.theme.Flow))
-	dc.SetLineWidth(1.6 * r.scale)
 	dc.SetLineCapRound()
 	dc.SetLineJoinRound()
 
+	// Edge-type-specific style.
+	switch edgeType {
+	case "messageFlow":
+		dc.SetLineWidth(r.lineWidth(1.4))
+		dc.SetDash(6*r.scale, 4*r.scale)
+	case "association":
+		dc.SetLineWidth(r.lineWidth(1))
+		dc.SetDash(2*r.scale, 3*r.scale)
+	default:
+		dc.SetLineWidth(r.lineWidth(1.6))
+		dc.SetDash() // explicit clear in case previous edge set a pattern
+	}
+
 	first := edge.Waypoints[0]
+	dc.NewSubPath()
 	dc.MoveTo(first.X*r.scale+offsetX, first.Y*r.scale+offsetY)
 	for _, wp := range edge.Waypoints[1:] {
 		dc.LineTo(wp.X*r.scale+offsetX, wp.Y*r.scale+offsetY)
 	}
 	dc.Stroke()
+	dc.SetDash()
 
-	// Draw arrowhead at the end
-	if len(edge.Waypoints) >= 2 {
+	// Draw arrowhead at the end (no arrowhead for plain associations)
+	if edgeType != "association" && len(edge.Waypoints) >= 2 {
 		last := edge.Waypoints[len(edge.Waypoints)-1]
 		prev := edge.Waypoints[len(edge.Waypoints)-2]
-		r.drawArrowhead(dc, prev.X*r.scale+offsetX, prev.Y*r.scale+offsetY, last.X*r.scale+offsetX, last.Y*r.scale+offsetY)
+		if edgeType == "messageFlow" {
+			r.drawOpenArrowhead(dc, prev.X*r.scale+offsetX, prev.Y*r.scale+offsetY, last.X*r.scale+offsetX, last.Y*r.scale+offsetY)
+			// Open circle at the start for message flows
+			dc.SetColor(hexColor("#ffffff"))
+			dc.DrawCircle(first.X*r.scale+offsetX, first.Y*r.scale+offsetY, 4*r.scale)
+			dc.FillPreserve()
+			dc.SetColor(hexColor(r.theme.Flow))
+			dc.SetLineWidth(r.lineWidth(1.2))
+			dc.Stroke()
+		} else {
+			r.drawArrowhead(dc, prev.X*r.scale+offsetX, prev.Y*r.scale+offsetY, last.X*r.scale+offsetX, last.Y*r.scale+offsetY)
+		}
 	}
 
 	// Edge label
@@ -585,6 +742,20 @@ func nearestPointOnPolylineRaw(waypoints []bpmn.Waypoint, px, py float64) (nx, n
 	return
 }
 
+// lineWidth returns the stroke width for a line, ensuring it never falls
+// below a sensible minimum so thin lines remain visible after the image is
+// downscaled for display. At scales >= ~2 the natural scaled width is used.
+func (r *RasterRenderer) lineWidth(base float64) float64 {
+	w := base * r.scale
+	// Enforce a minimum stroke width so edges/borders don't disappear when
+	// the viewer downsamples the raster image. 3 device pixels is a good
+	// balance between visibility and looking proportional at high scales.
+	if w < 3 {
+		return 3
+	}
+	return w
+}
+
 func (r *RasterRenderer) drawArrowhead(dc *gg.Context, fromX, fromY, toX, toY float64) {
 	angle := math.Atan2(toY-fromY, toX-fromX)
 	arrowLen := 10 * r.scale
@@ -601,6 +772,25 @@ func (r *RasterRenderer) drawArrowhead(dc *gg.Context, fromX, fromY, toX, toY fl
 	dc.LineTo(x2, y2)
 	dc.ClosePath()
 	dc.Fill()
+}
+
+// drawOpenArrowhead draws an unfilled "V" arrowhead used for message flows.
+func (r *RasterRenderer) drawOpenArrowhead(dc *gg.Context, fromX, fromY, toX, toY float64) {
+	angle := math.Atan2(toY-fromY, toX-fromX)
+	arrowLen := 11 * r.scale
+	arrowAngle := math.Pi / 6
+
+	x1 := toX - arrowLen*math.Cos(angle-arrowAngle)
+	y1 := toY - arrowLen*math.Sin(angle-arrowAngle)
+	x2 := toX - arrowLen*math.Cos(angle+arrowAngle)
+	y2 := toY - arrowLen*math.Sin(angle+arrowAngle)
+
+	dc.SetColor(hexColor(r.theme.Flow))
+	dc.SetLineWidth(r.lineWidth(1.4))
+	dc.MoveTo(x1, y1)
+	dc.LineTo(toX, toY)
+	dc.LineTo(x2, y2)
+	dc.Stroke()
 }
 
 func (r *RasterRenderer) drawLabel(dc *gg.Context, shape *bpmn.BPMNShape, x, y, w, h float64, name string) {

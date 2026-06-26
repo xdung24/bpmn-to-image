@@ -14,10 +14,20 @@ type Definitions struct {
 }
 
 type Collaboration struct {
-	XMLName      xml.Name      `xml:"collaboration"`
-	ID           string        `xml:"id,attr"`
-	Participants []Participant `xml:"participant"`
-	MessageFlows []MessageFlow `xml:"messageFlow"`
+	XMLName         xml.Name         `xml:"collaboration"`
+	ID              string           `xml:"id,attr"`
+	Participants    []Participant    `xml:"participant"`
+	MessageFlows    []MessageFlow    `xml:"messageFlow"`
+	TextAnnotations []TextAnnotation `xml:"textAnnotation"`
+	Associations    []Association    `xml:"association"`
+	Groups          []Group          `xml:"group"`
+}
+
+// Group is a visual grouping rendered as a dashed rounded rectangle.
+type Group struct {
+	XMLName          xml.Name `xml:"group"`
+	ID               string   `xml:"id,attr"`
+	CategoryValueRef string   `xml:"categoryValueRef,attr"`
 }
 
 type Participant struct {
@@ -61,6 +71,8 @@ type Process struct {
 	BoundaryEvents          []BoundaryEvent          `xml:"boundaryEvent"`
 	SequenceFlows           []SequenceFlow           `xml:"sequenceFlow"`
 	DataObjects             []DataObject             `xml:"dataObject"`
+	DataObjectReferences    []DataObjectReference    `xml:"dataObjectReference"`
+	DataStoreReferences     []DataStoreReference     `xml:"dataStoreReference"`
 	TextAnnotations         []TextAnnotation         `xml:"textAnnotation"`
 	Associations            []Association            `xml:"association"`
 	LaneSet                 *LaneSet                 `xml:"laneSet"`
@@ -171,6 +183,8 @@ type SubProcess struct {
 	BoundaryEvents          []BoundaryEvent          `xml:"boundaryEvent"`
 	SequenceFlows           []SequenceFlow           `xml:"sequenceFlow"`
 	DataObjects             []DataObject             `xml:"dataObject"`
+	DataObjectReferences    []DataObjectReference    `xml:"dataObjectReference"`
+	DataStoreReferences     []DataStoreReference     `xml:"dataStoreReference"`
 	TextAnnotations         []TextAnnotation         `xml:"textAnnotation"`
 	Associations            []Association            `xml:"association"`
 }
@@ -270,6 +284,21 @@ type ConditionExpression struct {
 
 type DataObject struct {
 	XMLName xml.Name `xml:"dataObject"`
+	ID      string   `xml:"id,attr"`
+	Name    string   `xml:"name,attr"`
+}
+
+// DataObjectReference is a visible reference to a DataObject in the diagram.
+type DataObjectReference struct {
+	XMLName       xml.Name `xml:"dataObjectReference"`
+	ID            string   `xml:"id,attr"`
+	Name          string   `xml:"name,attr"`
+	DataObjectRef string   `xml:"dataObjectRef,attr"`
+}
+
+// DataStoreReference is a database/storage element shown as a cylinder.
+type DataStoreReference struct {
+	XMLName xml.Name `xml:"dataStoreReference"`
 	ID      string   `xml:"id,attr"`
 	Name    string   `xml:"name,attr"`
 }
