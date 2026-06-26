@@ -519,8 +519,28 @@ func (r *RasterRenderer) drawEdge(dc *gg.Context, edge *bpmn.BPMNEdge, offsetX, 
 	// Edge label
 	if name != "" && edge.Label != nil && edge.Label.Bounds != nil {
 		lb := edge.Label.Bounds
-		lx := lb.X*r.scale + offsetX + lb.Width*r.scale/2
-		ly := lb.Y*r.scale + offsetY + lb.Height*r.scale/2
+		lcx := lb.X + lb.Width/2
+		lcy := lb.Y + lb.Height/2
+
+		// If the label is far from the line, snap it close to the line so
+		// the relationship is obvious.
+		const maxDist = 20.0
+		const targetDist = 12.0
+		nx, ny, dist := nearestPointOnPolylineRaw(edge.Waypoints, lcx, lcy)
+		if dist > maxDist {
+			dx, dy := lcx-nx, lcy-ny
+			if dist > 0 {
+				lcx = nx + dx/dist*targetDist
+				lcy = ny + dy/dist*targetDist
+			} else {
+				lcx = nx
+				lcy = ny - targetDist
+			}
+		}
+
+		lx := lcx*r.scale + offsetX
+		ly := lcy*r.scale + offsetY
+
 		// Background pill for readability
 		tw, th := dc.MeasureString(name)
 		dc.SetColor(hexColor(r.theme.CanvasBg))
@@ -529,6 +549,40 @@ func (r *RasterRenderer) drawEdge(dc *gg.Context, edge *bpmn.BPMNEdge, offsetX, 
 		dc.SetColor(hexColor(r.theme.Flow))
 		dc.DrawStringAnchored(name, lx, ly, 0.5, 0.5)
 	}
+}
+
+// nearestPointOnPolylineRaw returns the closest point on the unscaled
+// polyline to (px, py) (also unscaled), and the distance to it.
+func nearestPointOnPolylineRaw(waypoints []bpmn.Waypoint, px, py float64) (nx, ny, dist float64) {
+	if len(waypoints) == 0 {
+		return px, py, 0
+	}
+	nx, ny = waypoints[0].X, waypoints[0].Y
+	dist = math.Hypot(px-nx, py-ny)
+	for i := 0; i+1 < len(waypoints); i++ {
+		ax, ay := waypoints[i].X, waypoints[i].Y
+		bx, by := waypoints[i+1].X, waypoints[i+1].Y
+		dx, dy := bx-ax, by-ay
+		lenSq := dx*dx + dy*dy
+		var cx, cy float64
+		if lenSq == 0 {
+			cx, cy = ax, ay
+		} else {
+			t := ((px-ax)*dx + (py-ay)*dy) / lenSq
+			if t < 0 {
+				t = 0
+			} else if t > 1 {
+				t = 1
+			}
+			cx, cy = ax+t*dx, ay+t*dy
+		}
+		d := math.Hypot(px-cx, py-cy)
+		if d < dist {
+			dist = d
+			nx, ny = cx, cy
+		}
+	}
+	return
 }
 
 func (r *RasterRenderer) drawArrowhead(dc *gg.Context, fromX, fromY, toX, toY float64) {

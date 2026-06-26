@@ -430,14 +430,71 @@ func (r *SVGRenderer) renderEdge(sb *strings.Builder, edge *bpmn.BPMNEdge, offse
 	name := names[edge.BpmnElement]
 	if name != "" && edge.Label != nil && edge.Label.Bounds != nil {
 		lb := edge.Label.Bounds
-		lx := lb.X + offsetX + lb.Width/2
-		ly := lb.Y + offsetY + lb.Height/2
+		lcx := lb.X + lb.Width/2
+		lcy := lb.Y + lb.Height/2
+
+		// If the label is far from the edge polyline, pull it toward the
+		// nearest point on the line so the relationship is obvious.
+		const maxDist = 20.0
+		const targetDist = 12.0
+		nx, ny, dist := nearestPointOnPolyline(edge.Waypoints, lcx, lcy)
+		if dist > maxDist {
+			dx, dy := lcx-nx, lcy-ny
+			if dist > 0 {
+				lcx = nx + dx/dist*targetDist
+				lcy = ny + dy/dist*targetDist
+			} else {
+				lcx = nx
+				lcy = ny - targetDist
+			}
+		}
+
+		lx := lcx + offsetX
+		ly := lcy + offsetY
+
 		// Background pill for readability
 		sb.WriteString(fmt.Sprintf(`  <rect x="%.1f" y="%.1f" width="%.1f" height="16" rx="3" fill="%s" opacity="0.85"/>
 `, lx-float64(len(name))*3.2-3, ly-8, float64(len(name))*6.4+6, r.theme.CanvasBg))
 		sb.WriteString(fmt.Sprintf(`  <text x="%.1f" y="%.1f" class="bpmn-flow-label">%s</text>
 `, lx, ly, escapeXML(name)))
 	}
+}
+
+// nearestPointOnPolyline returns the closest point on the polyline (made of
+// waypoints) to the given (px, py) coordinates, along with the distance.
+func nearestPointOnPolyline(waypoints []bpmn.Waypoint, px, py float64) (nx, ny, dist float64) {
+	if len(waypoints) == 0 {
+		return px, py, 0
+	}
+	nx, ny = waypoints[0].X, waypoints[0].Y
+	dist = math.Hypot(px-nx, py-ny)
+	for i := 0; i+1 < len(waypoints); i++ {
+		ax, ay := waypoints[i].X, waypoints[i].Y
+		bx, by := waypoints[i+1].X, waypoints[i+1].Y
+		cx, cy := nearestPointOnSegment(ax, ay, bx, by, px, py)
+		d := math.Hypot(px-cx, py-cy)
+		if d < dist {
+			dist = d
+			nx, ny = cx, cy
+		}
+	}
+	return
+}
+
+// nearestPointOnSegment returns the closest point on segment AB to point P.
+func nearestPointOnSegment(ax, ay, bx, by, px, py float64) (float64, float64) {
+	dx, dy := bx-ax, by-ay
+	lenSq := dx*dx + dy*dy
+	if lenSq == 0 {
+		return ax, ay
+	}
+	t := ((px-ax)*dx + (py-ay)*dy) / lenSq
+	if t < 0 {
+		t = 0
+	} else if t > 1 {
+		t = 1
+	}
+	return ax + t*dx, ay + t*dy
 }
 
 func (r *SVGRenderer) renderShapeLabel(sb *strings.Builder, shape *bpmn.BPMNShape, x, y, w, h float64, name string) {

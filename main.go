@@ -12,7 +12,7 @@ import (
 	"github.com/xdung24/bpmn-to-image/renderer"
 )
 
-var version = "0.2.2"
+var version = "0.2.3"
 
 func main() {
 	var (
