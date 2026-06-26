@@ -148,6 +148,31 @@ type BusinessRuleTask struct {
 type SubProcess struct {
 	XMLName xml.Name `xml:"subProcess"`
 	FlowNode
+
+	// Nested flow elements (a subprocess can contain its own sub-graph)
+	StartEvents             []StartEvent             `xml:"startEvent"`
+	EndEvents               []EndEvent               `xml:"endEvent"`
+	Tasks                   []Task                   `xml:"task"`
+	UserTasks               []UserTask               `xml:"userTask"`
+	ServiceTasks            []ServiceTask            `xml:"serviceTask"`
+	ScriptTasks             []ScriptTask             `xml:"scriptTask"`
+	SendTasks               []SendTask               `xml:"sendTask"`
+	ReceiveTasks            []ReceiveTask            `xml:"receiveTask"`
+	ManualTasks             []ManualTask             `xml:"manualTask"`
+	BusinessRuleTasks       []BusinessRuleTask       `xml:"businessRuleTask"`
+	SubProcesses            []SubProcess             `xml:"subProcess"`
+	CallActivities          []CallActivity           `xml:"callActivity"`
+	ExclusiveGateways       []ExclusiveGateway       `xml:"exclusiveGateway"`
+	ParallelGateways        []ParallelGateway        `xml:"parallelGateway"`
+	InclusiveGateways       []InclusiveGateway       `xml:"inclusiveGateway"`
+	EventBasedGateways      []EventBasedGateway      `xml:"eventBasedGateway"`
+	IntermediateCatchEvents []IntermediateCatchEvent `xml:"intermediateCatchEvent"`
+	IntermediateThrowEvents []IntermediateThrowEvent `xml:"intermediateThrowEvent"`
+	BoundaryEvents          []BoundaryEvent          `xml:"boundaryEvent"`
+	SequenceFlows           []SequenceFlow           `xml:"sequenceFlow"`
+	DataObjects             []DataObject             `xml:"dataObject"`
+	TextAnnotations         []TextAnnotation         `xml:"textAnnotation"`
+	Associations            []Association            `xml:"association"`
 }
 
 type CallActivity struct {

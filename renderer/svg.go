@@ -98,6 +98,7 @@ func (r *SVGRenderer) Render(defs *bpmn.Definitions) ([]byte, error) {
   .bpmn-pool-header { fill: %s; stroke: %s; stroke-width: 2; }
   .bpmn-lane { fill: none; stroke: %s; stroke-width: 1; stroke-dasharray: 4,4; }
   .bpmn-annotation { fill: none; stroke: %s; stroke-width: 1; }
+  .bpmn-annotation-text { font-family: 'Segoe UI', Arial, sans-serif; font-size: 11px; fill: %s; }
   .bpmn-icon { stroke: %s; fill: none; }
 </style>
 <rect x="0" y="0" width="%.0f" height="%.0f" fill="%s"/>
@@ -106,7 +107,7 @@ func (r *SVGRenderer) Render(defs *bpmn.Definitions) ([]byte, error) {
 		t.TaskFill, t.SubProcessFill, t.StartFill, t.EndFill, t.IntermediateFill, t.GatewayFill,
 		t.TaskStroke, t.SubProcessStroke, t.StartStroke, t.IntermediateStroke, t.EndStroke,
 		t.GatewayStroke, t.GatewayMarker, t.Flow, t.Label, t.Flow,
-		t.PoolFill, t.PoolStroke, t.PoolHeader, t.PoolStroke, t.LaneStroke, t.AnnotationStroke, t.IconColor,
+		t.PoolFill, t.PoolStroke, t.PoolHeader, t.PoolStroke, t.LaneStroke, t.AnnotationStroke, t.Label, t.IconColor,
 		width, height, t.CanvasBg))
 
 	// Render shapes
@@ -202,7 +203,7 @@ func (r *SVGRenderer) renderShape(sb *strings.Builder, shape *bpmn.BPMNShape, el
 	case "lane":
 		r.renderLane(sb, x, y, w, h, shape, name)
 	case "textAnnotation":
-		r.renderTextAnnotation(sb, x, y, w, h, shape)
+		r.renderTextAnnotation(sb, x, y, w, h, shape, name)
 	default:
 		// Generic rectangle for unknown elements
 		sb.WriteString(fmt.Sprintf(`  <rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" rx="5" ry="5" class="bpmn-task"/>
@@ -264,7 +265,33 @@ func (r *SVGRenderer) renderSubProcess(sb *strings.Builder, x, y, w, h float64, 
 	sb.WriteString(fmt.Sprintf(`  <rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" rx="10" ry="10" class="bpmn-subprocess"/>
 `, x, y, w, h))
 
-	// + marker at bottom center
+	// Expanded subprocess: no [+] marker, label at the top.
+	// Collapsed subprocess: [+] marker at bottom centre, label in the middle.
+	expanded := shape.IsExpanded != nil && *shape.IsExpanded
+	if expanded {
+		if name != "" {
+			if shape.Label != nil && shape.Label.Bounds != nil {
+				// Honour the external label bounds
+				r.renderShapeLabel(sb, shape, x, y, w, h, name)
+			} else {
+				// Top-centered label inside the container
+				labelX := x + w/2
+				labelY := y + 18
+				wrapWidth := w - 20
+				if wrapWidth < 60 {
+					wrapWidth = 60
+				}
+				lines := wrapText(name, int(wrapWidth))
+				for i, line := range lines {
+					sb.WriteString(fmt.Sprintf(`  <text x="%.1f" y="%.1f" class="bpmn-label">%s</text>
+`, labelX, labelY+float64(i)*14, escapeXML(line)))
+				}
+			}
+		}
+		return
+	}
+
+	// Collapsed: + marker at bottom center
 	cx := x + w/2
 	cy := y + h - 10
 	sb.WriteString(fmt.Sprintf(`  <rect x="%.1f" y="%.1f" width="12" height="12" class="bpmn-icon" stroke-width="1.2"/>
@@ -362,10 +389,28 @@ func (r *SVGRenderer) renderLane(sb *strings.Builder, x, y, w, h float64, shape 
 `, x, y, w, h))
 }
 
-func (r *SVGRenderer) renderTextAnnotation(sb *strings.Builder, x, y, w, h float64, shape *bpmn.BPMNShape) {
+func (r *SVGRenderer) renderTextAnnotation(sb *strings.Builder, x, y, w, h float64, shape *bpmn.BPMNShape, name string) {
 	// Open bracket shape
 	sb.WriteString(fmt.Sprintf(`  <path d="M%.1f,%.1f L%.1f,%.1f L%.1f,%.1f L%.1f,%.1f" class="bpmn-annotation"/>
 `, x+10, y, x, y, x, y+h, x+10, y+h))
+
+	// Text content (left-aligned with small padding)
+	if name == "" {
+		return
+	}
+	wrapWidth := w - 14
+	if wrapWidth < 50 {
+		wrapWidth = 50
+	}
+	lines := wrapText(name, int(wrapWidth))
+	lineHeight := 14.0
+	totalHeight := float64(len(lines)) * lineHeight
+	startY := y + (h-totalHeight)/2 + 12
+	textX := x + 14
+	for i, line := range lines {
+		sb.WriteString(fmt.Sprintf(`  <text x="%.1f" y="%.1f" class="bpmn-annotation-text" text-anchor="start">%s</text>
+`, textX, startY+float64(i)*lineHeight, escapeXML(line)))
+	}
 }
 
 func (r *SVGRenderer) renderEdge(sb *strings.Builder, edge *bpmn.BPMNEdge, offsetX, offsetY float64, names map[string]string) {
@@ -449,20 +494,13 @@ func (r *SVGRenderer) renderLabelBelow(sb *strings.Builder, cx, topY, wrapWidth 
 func buildElementTypeMap(defs *bpmn.Definitions) map[string]string {
 	types := make(map[string]string)
 
-	for _, proc := range defs.Processes {
+	for i := range defs.Processes {
+		proc := &defs.Processes[i]
 		nodes := proc.GetAllFlowNodes()
 		for id, t := range nodes {
 			types[id] = t
 		}
-		for _, sf := range proc.SequenceFlows {
-			types[sf.ID] = "sequenceFlow"
-		}
-		for _, ta := range proc.TextAnnotations {
-			types[ta.ID] = "textAnnotation"
-		}
-		for _, a := range proc.Associations {
-			types[a.ID] = "association"
-		}
+		collectProcessConnectors(types, proc)
 	}
 
 	for _, collab := range defs.Collaborations {
@@ -477,109 +515,49 @@ func buildElementTypeMap(defs *bpmn.Definitions) map[string]string {
 	return types
 }
 
+// collectProcessConnectors registers sequence flows, text annotations, and
+// associations from a process and recurses into nested subprocesses.
+func collectProcessConnectors(types map[string]string, proc *bpmn.Process) {
+	for _, sf := range proc.SequenceFlows {
+		types[sf.ID] = "sequenceFlow"
+	}
+	for _, ta := range proc.TextAnnotations {
+		types[ta.ID] = "textAnnotation"
+	}
+	for _, a := range proc.Associations {
+		types[a.ID] = "association"
+	}
+	for i := range proc.SubProcesses {
+		collectSubProcessConnectors(types, &proc.SubProcesses[i])
+	}
+}
+
+func collectSubProcessConnectors(types map[string]string, sp *bpmn.SubProcess) {
+	for _, sf := range sp.SequenceFlows {
+		types[sf.ID] = "sequenceFlow"
+	}
+	for _, ta := range sp.TextAnnotations {
+		types[ta.ID] = "textAnnotation"
+	}
+	for _, a := range sp.Associations {
+		types[a.ID] = "association"
+	}
+	for i := range sp.SubProcesses {
+		collectSubProcessConnectors(types, &sp.SubProcesses[i])
+	}
+}
+
 // buildElementNameMap creates a map of element ID -> name for label rendering.
+// Recurses into subprocesses to gather names of nested elements.
 func BuildElementNameMap(defs *bpmn.Definitions) map[string]string {
 	names := make(map[string]string)
 
-	for _, proc := range defs.Processes {
+	for i := range defs.Processes {
+		proc := &defs.Processes[i]
 		if proc.Name != "" {
 			names[proc.ID] = proc.Name
 		}
-		for _, e := range proc.StartEvents {
-			if e.Name != "" {
-				names[e.ID] = e.Name
-			}
-		}
-		for _, e := range proc.EndEvents {
-			if e.Name != "" {
-				names[e.ID] = e.Name
-			}
-		}
-		for _, e := range proc.Tasks {
-			if e.Name != "" {
-				names[e.ID] = e.Name
-			}
-		}
-		for _, e := range proc.UserTasks {
-			if e.Name != "" {
-				names[e.ID] = e.Name
-			}
-		}
-		for _, e := range proc.ServiceTasks {
-			if e.Name != "" {
-				names[e.ID] = e.Name
-			}
-		}
-		for _, e := range proc.ScriptTasks {
-			if e.Name != "" {
-				names[e.ID] = e.Name
-			}
-		}
-		for _, e := range proc.SendTasks {
-			if e.Name != "" {
-				names[e.ID] = e.Name
-			}
-		}
-		for _, e := range proc.ReceiveTasks {
-			if e.Name != "" {
-				names[e.ID] = e.Name
-			}
-		}
-		for _, e := range proc.ManualTasks {
-			if e.Name != "" {
-				names[e.ID] = e.Name
-			}
-		}
-		for _, e := range proc.BusinessRuleTasks {
-			if e.Name != "" {
-				names[e.ID] = e.Name
-			}
-		}
-		for _, e := range proc.SubProcesses {
-			if e.Name != "" {
-				names[e.ID] = e.Name
-			}
-		}
-		for _, e := range proc.CallActivities {
-			if e.Name != "" {
-				names[e.ID] = e.Name
-			}
-		}
-		for _, e := range proc.ExclusiveGateways {
-			if e.Name != "" {
-				names[e.ID] = e.Name
-			}
-		}
-		for _, e := range proc.ParallelGateways {
-			if e.Name != "" {
-				names[e.ID] = e.Name
-			}
-		}
-		for _, e := range proc.InclusiveGateways {
-			if e.Name != "" {
-				names[e.ID] = e.Name
-			}
-		}
-		for _, e := range proc.IntermediateCatchEvents {
-			if e.Name != "" {
-				names[e.ID] = e.Name
-			}
-		}
-		for _, e := range proc.IntermediateThrowEvents {
-			if e.Name != "" {
-				names[e.ID] = e.Name
-			}
-		}
-		for _, e := range proc.BoundaryEvents {
-			if e.Name != "" {
-				names[e.ID] = e.Name
-			}
-		}
-		for _, sf := range proc.SequenceFlows {
-			if sf.Name != "" {
-				names[sf.ID] = sf.Name
-			}
-		}
+		collectProcessNames(names, proc)
 	}
 
 	for _, collab := range defs.Collaborations {
@@ -596,6 +574,147 @@ func BuildElementNameMap(defs *bpmn.Definitions) map[string]string {
 	}
 
 	return names
+}
+
+// collectProcessNames gathers all element names from a Process, recursing into subprocesses.
+func collectProcessNames(names map[string]string, proc *bpmn.Process) {
+	for _, e := range proc.StartEvents {
+		addName(names, e.ID, e.Name)
+	}
+	for _, e := range proc.EndEvents {
+		addName(names, e.ID, e.Name)
+	}
+	for _, e := range proc.Tasks {
+		addName(names, e.ID, e.Name)
+	}
+	for _, e := range proc.UserTasks {
+		addName(names, e.ID, e.Name)
+	}
+	for _, e := range proc.ServiceTasks {
+		addName(names, e.ID, e.Name)
+	}
+	for _, e := range proc.ScriptTasks {
+		addName(names, e.ID, e.Name)
+	}
+	for _, e := range proc.SendTasks {
+		addName(names, e.ID, e.Name)
+	}
+	for _, e := range proc.ReceiveTasks {
+		addName(names, e.ID, e.Name)
+	}
+	for _, e := range proc.ManualTasks {
+		addName(names, e.ID, e.Name)
+	}
+	for _, e := range proc.BusinessRuleTasks {
+		addName(names, e.ID, e.Name)
+	}
+	for i := range proc.SubProcesses {
+		addName(names, proc.SubProcesses[i].ID, proc.SubProcesses[i].Name)
+		collectSubProcessNames(names, &proc.SubProcesses[i])
+	}
+	for _, e := range proc.CallActivities {
+		addName(names, e.ID, e.Name)
+	}
+	for _, e := range proc.ExclusiveGateways {
+		addName(names, e.ID, e.Name)
+	}
+	for _, e := range proc.ParallelGateways {
+		addName(names, e.ID, e.Name)
+	}
+	for _, e := range proc.InclusiveGateways {
+		addName(names, e.ID, e.Name)
+	}
+	for _, e := range proc.EventBasedGateways {
+		addName(names, e.ID, e.Name)
+	}
+	for _, e := range proc.IntermediateCatchEvents {
+		addName(names, e.ID, e.Name)
+	}
+	for _, e := range proc.IntermediateThrowEvents {
+		addName(names, e.ID, e.Name)
+	}
+	for _, e := range proc.BoundaryEvents {
+		addName(names, e.ID, e.Name)
+	}
+	for _, sf := range proc.SequenceFlows {
+		addName(names, sf.ID, sf.Name)
+	}
+	for _, ta := range proc.TextAnnotations {
+		addName(names, ta.ID, ta.Text)
+	}
+}
+
+func collectSubProcessNames(names map[string]string, sp *bpmn.SubProcess) {
+	for _, e := range sp.StartEvents {
+		addName(names, e.ID, e.Name)
+	}
+	for _, e := range sp.EndEvents {
+		addName(names, e.ID, e.Name)
+	}
+	for _, e := range sp.Tasks {
+		addName(names, e.ID, e.Name)
+	}
+	for _, e := range sp.UserTasks {
+		addName(names, e.ID, e.Name)
+	}
+	for _, e := range sp.ServiceTasks {
+		addName(names, e.ID, e.Name)
+	}
+	for _, e := range sp.ScriptTasks {
+		addName(names, e.ID, e.Name)
+	}
+	for _, e := range sp.SendTasks {
+		addName(names, e.ID, e.Name)
+	}
+	for _, e := range sp.ReceiveTasks {
+		addName(names, e.ID, e.Name)
+	}
+	for _, e := range sp.ManualTasks {
+		addName(names, e.ID, e.Name)
+	}
+	for _, e := range sp.BusinessRuleTasks {
+		addName(names, e.ID, e.Name)
+	}
+	for i := range sp.SubProcesses {
+		addName(names, sp.SubProcesses[i].ID, sp.SubProcesses[i].Name)
+		collectSubProcessNames(names, &sp.SubProcesses[i])
+	}
+	for _, e := range sp.CallActivities {
+		addName(names, e.ID, e.Name)
+	}
+	for _, e := range sp.ExclusiveGateways {
+		addName(names, e.ID, e.Name)
+	}
+	for _, e := range sp.ParallelGateways {
+		addName(names, e.ID, e.Name)
+	}
+	for _, e := range sp.InclusiveGateways {
+		addName(names, e.ID, e.Name)
+	}
+	for _, e := range sp.EventBasedGateways {
+		addName(names, e.ID, e.Name)
+	}
+	for _, e := range sp.IntermediateCatchEvents {
+		addName(names, e.ID, e.Name)
+	}
+	for _, e := range sp.IntermediateThrowEvents {
+		addName(names, e.ID, e.Name)
+	}
+	for _, e := range sp.BoundaryEvents {
+		addName(names, e.ID, e.Name)
+	}
+	for _, sf := range sp.SequenceFlows {
+		addName(names, sf.ID, sf.Name)
+	}
+	for _, ta := range sp.TextAnnotations {
+		addName(names, ta.ID, ta.Text)
+	}
+}
+
+func addName(names map[string]string, id, name string) {
+	if id != "" && name != "" {
+		names[id] = name
+	}
 }
 
 func escapeXML(s string) string {

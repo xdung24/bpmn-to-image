@@ -176,7 +176,7 @@ func (r *RasterRenderer) drawShape(dc *gg.Context, shape *bpmn.BPMNShape, elemTy
 	case "task", "userTask", "serviceTask", "scriptTask", "sendTask", "receiveTask", "manualTask", "businessRuleTask", "callActivity":
 		r.drawTask(dc, x, y, w, h, elemType, name)
 	case "subProcess":
-		r.drawSubProcess(dc, x, y, w, h, name)
+		r.drawSubProcess(dc, x, y, w, h, name, shape)
 	case "exclusiveGateway":
 		r.drawGateway(dc, x, y, w, h, "X", name)
 	case "parallelGateway":
@@ -194,7 +194,7 @@ func (r *RasterRenderer) drawShape(dc *gg.Context, shape *bpmn.BPMNShape, elemTy
 	case "lane":
 		r.drawLane(dc, x, y, w, h)
 	case "textAnnotation":
-		r.drawTextAnnotation(dc, x, y, w, h)
+		r.drawTextAnnotation(dc, x, y, w, h, name)
 	default:
 		r.drawTask(dc, x, y, w, h, "task", name)
 	}
@@ -290,7 +290,7 @@ func (r *RasterRenderer) drawTaskIcon(dc *gg.Context, x, y float64, elemType str
 	}
 }
 
-func (r *RasterRenderer) drawSubProcess(dc *gg.Context, x, y, w, h float64, name string) {
+func (r *RasterRenderer) drawSubProcess(dc *gg.Context, x, y, w, h float64, name string, shape *bpmn.BPMNShape) {
 	rx := 10 * r.scale
 
 	r.drawSoftShadowRect(dc, x, y, w, h, rx)
@@ -304,7 +304,17 @@ func (r *RasterRenderer) drawSubProcess(dc *gg.Context, x, y, w, h float64, name
 	dc.DrawRoundedRectangle(x, y, w, h, rx)
 	dc.Stroke()
 
-	// + marker at bottom
+	expanded := shape != nil && shape.IsExpanded != nil && *shape.IsExpanded
+
+	if expanded {
+		// Expanded: no [+] marker, label across the top.
+		if name != "" {
+			r.drawWrappedTextTop(dc, x+w/2, y+8*r.scale, w-10*r.scale, name)
+		}
+		return
+	}
+
+	// Collapsed: + marker at bottom, label in middle.
 	cx := x + w/2
 	cy := y + h - 10*r.scale
 	size := 6 * r.scale
@@ -455,7 +465,7 @@ func (r *RasterRenderer) drawLane(dc *gg.Context, x, y, w, h float64) {
 	dc.SetDash() // reset
 }
 
-func (r *RasterRenderer) drawTextAnnotation(dc *gg.Context, x, y, w, h float64) {
+func (r *RasterRenderer) drawTextAnnotation(dc *gg.Context, x, y, w, h float64, name string) {
 	dc.SetColor(hexColor(r.theme.AnnotationStroke))
 	dc.SetLineWidth(1 * r.scale)
 	dc.MoveTo(x+10*r.scale, y)
@@ -463,6 +473,23 @@ func (r *RasterRenderer) drawTextAnnotation(dc *gg.Context, x, y, w, h float64) 
 	dc.LineTo(x, y+h)
 	dc.LineTo(x+10*r.scale, y+h)
 	dc.Stroke()
+
+	if name == "" {
+		return
+	}
+	pad := 14 * r.scale
+	wrapWidth := w - pad - 4*r.scale
+	if wrapWidth < 30*r.scale {
+		wrapWidth = 30 * r.scale
+	}
+	lines := r.wrapMeasured(dc, name, wrapWidth)
+	lineH := 12 * r.scale * 1.3
+	totalH := float64(len(lines)) * lineH
+	startY := y + (h-totalH)/2 + lineH*0.5
+	dc.SetColor(hexColor(r.theme.Label))
+	for i, line := range lines {
+		dc.DrawStringAnchored(line, x+pad, startY+float64(i)*lineH, 0, 0.5)
+	}
 }
 
 func (r *RasterRenderer) drawEdge(dc *gg.Context, edge *bpmn.BPMNEdge, offsetX, offsetY float64, name string) {
