@@ -1,6 +1,6 @@
 module github.com/xdung24/bpmn-to-image
 
-go 1.25.5
+go 1.26.4
 
 require (
 	github.com/fogleman/gg v1.3.0
